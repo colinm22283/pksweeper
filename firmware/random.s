@@ -7,13 +7,6 @@ random_state: .skip 2
 
 .section .text
 
-.global random_init
-random_init:
-    mov $1, %ax
-    mov %ax, (random_state)
-
-    ret
-
 .global random_generate
 random_generate:
     mov (random_state), %ax

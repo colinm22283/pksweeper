@@ -1,5 +1,5 @@
-FW_OBJS+=$(OBJ_DIR)/entry.o
-FW_OBJS+=$(OBJ_DIR)/board.o
+FW_OBJS+=$(OBJ_DIR)/unified.o
+# FW_OBJS+=$(OBJ_DIR)/board.o
 FW_OBJS+=$(OBJ_DIR)/random.o
 
 $(BIN_DIR)/pksweeper: $(FW_OBJS) linker.ld

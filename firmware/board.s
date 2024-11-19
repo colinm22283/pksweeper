@@ -12,7 +12,7 @@ cur_y: .skip 2
 
 .section .data
 
-boom_str: .string "BOOM!"
+boom_str: .string "BOOM"
 
 .section .text
 
@@ -21,19 +21,19 @@ mine  = 10
 csafe = 11
 cmine = 12
 
-mine_count = 50
+mine_count = 500
 
 .global init_board
 init_board:
-    mov $csafe,     %al
-    mov $board, %bx
+    mov $board,     %bx
     mov $(80 * 24), %cx
     .ib_loop:
-        movb %al, (%bx)
+        movb $csafe, (%bx)
         inc  %bx
 
         loop .ib_loop
 
+    inc %cl
     mov %cx, (cur_x)
     mov %cx, (cur_y)
     
@@ -41,18 +41,12 @@ init_board:
     .ib_mine_loop:
         push  %cx
 
-        call  random_generate
-        mov   $22, %bx
-        xor   %dx, %dx
-        div   %bx
-        inc   %dx
+        mov   $22, %cx
+        call .ib_gen_num
         push  %dx
 
-        call  random_generate
-        mov   $78, %bx
-        xor   %dx, %dx
-        div   %bx
-        inc   %dl
+        mov   $78, %cl
+        call .ib_gen_num
         movzx %dl, %cx
 
         pop   %ax
@@ -70,9 +64,17 @@ init_board:
         loop  .ib_mine_loop
     
     mov $cmine, %cl
-    mov %cl, (board + 80 + 1)
+    mov %cl, (board + 2 * 80 + 2)
 
     ret
+
+    .ib_gen_num:
+        call random_generate
+        xor  %dx, %dx
+        div  %cx
+        inc  %dx
+        
+        ret
 
 .global print_board
 print_board:
@@ -89,37 +91,31 @@ print_board:
     mov $board, %bx
     mov $0, %cx
     .bp_loop:
-        push %ax
-        push %bx
-        push %cx
+        pusha
 
-        mov  $0x000F, %di
+        mov  $0x000F, %dx
 
         cmp  %ax, %cx
         jne  ..not_cur
-            mov $0x00F0, %di
+            mov $0xF0, %dl
         ..not_cur:
 
         movb (%bx), %al
         test %al,   %al
         jz  ..bp_blank 
         cmp  $mine, %al
-        je   ..bp_mine
         ja   ..bp_uncovered
             add $'0', %al
             jmp ..bp_skip
         ..bp_blank:
             mov $' ', %al
             jmp ..bp_skip
-        ..bp_mine:
-            mov $'*', %al
-            jmp ..bp_skip
         ..bp_uncovered:
             mov $'#', %al
         ..bp_skip:
 
         mov $0x09,   %ah
-        mov %di,     %bx
+        mov %dx,     %bx
         mov $1,      %cx
         int $0x10
 
@@ -140,9 +136,7 @@ print_board:
         xor %bh,   %bh
         int $0x10
 
-        pop %cx
-        pop %bx
-        pop %ax
+        popa
 
         inc %bx
         inc %cx
@@ -159,63 +153,117 @@ uncover_cell:
     mul %cl
     add %ax, %bx
 
-    mov $board,     %si
-    mov (%bx, %si), %al
+    add $board, %bx
+    mov (%bx),  %al
 
     cmp $csafe, %al
     jb  ..uc_ret
-        cmp $1,     %di
-        je  ..uc_ret
         cmp $cmine, %al
         jne ..uc_not_mine    
             mov $0x1300,   %ax
             mov $0x004F,   %bx
-            mov $5,        %cx
-            mov $0x1800,   %dx
+            mov $4,        %cx
+            xor %dx,       %dx
             mov $boom_str, %bp
-
             int $0x10
 
-            hlt
+            mov $0x86,     %ah
+            mov $46,       %cx
+            xor %dx,       %dx
+            int $0x15
+
+            jmp restart
         ..uc_not_mine:
         cmp $csafe, %al
         jne ..uc_not_safe
             # bx is board cur addr
-            lea (%bx, %si), %bx
+            lea (%bx), %bx
             
             xor %dl, %dl
             
             mov  -81(%bx),   %cx
-            call ...uc_check_mine
+            call .uc_check_mine
             mov  -79(%bx),   %cl
-            mov  -1(%bx),  %ch
-            call ...uc_check_mine 
-            mov  2(%bx),  %cl
-            mov  80(%bx), %ch
-            call ...uc_check_mine 
-            mov  81(%bx), %cx
-            call ...uc_check_mine 
+            mov  -1(%bx),    %ch
+            call .uc_check_mine 
+            mov  1(%bx),     %cl
+            mov  79(%bx),    %ch
+            call .uc_check_mine 
+            mov  80(%bx),    %cx
+            call .uc_check_mine 
             
             mov %dl, (%bx)
 
             test %dl, %dl
             jnz  ...uc_not_zero_mines
+                mov $-1, %ax
+                xor %bx, %bx
+                mov $1,  %cx
+
+                push %ax
+                push %bx
+                push %cx
+                push %ax
+
+                push %ax
+                push %cx
+                push %bx
+
+                push %ax
+                push %bx
+                push %cx
+                push %cx
+                
+                pop %ax
+                call .uc_zero_recur
+                call .uc_zero_recur
+                call .uc_zero_recur
+
+                pop %ax
+                call .uc_zero_recur
+                call .uc_zero_recur
+
+                pop %ax
+                call .uc_zero_recur
+                call .uc_zero_recur
+                call .uc_zero_recur
             ...uc_not_zero_mines:
-
-            jmp ...uc_check_mine_skip
-            ...uc_check_mine:
-                cmp $cmine, %ch
-                jne ....uc_skip_first
-                    inc %dl
-                ....uc_skip_first:
-                cmp $cmine, %cl
-                jne ....uc_skip_second
-                    inc %dl
-                ....uc_skip_second:
-
-                ret
-            ...uc_check_mine_skip:
         ..uc_not_safe:
     ..uc_ret:
 
     ret
+
+    .uc_check_mine:
+        cmp $cmine, %ch
+        jne ..uc_skip_first
+            inc %dl
+        ..uc_skip_first:
+        cmp $cmine, %cl
+        jne ..uc_skip_second
+            inc %dl
+        ..uc_skip_second:
+
+        ret
+
+    .uc_zero_recur:
+        pop  %dx
+        pop  %bx
+        push %dx
+
+        mov (cur_x), %cx
+        mov (cur_y), %dx
+
+        pusha
+        
+        add  %ax, %cx
+        add  %bx, %dx
+        mov  %cx,     (cur_x)
+        mov  %dx,     (cur_y)
+        call uncover_cell
+
+        popa
+
+        mov %cx, (cur_x)
+        mov %dx, (cur_y)
+
+        ret
