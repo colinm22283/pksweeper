@@ -1,3 +1,9 @@
+mod board;
+
+use board::Board;
+
 fn main() {
-    println!("Hello, world!");
+    let board: Board = Board::new(10, 10);
+
+    board.draw();
 }
